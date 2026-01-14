@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="Pairox.Backend/Pairox.Backend.csproj" />
+  <Project Path="Pairox.Core/Pairox.Core.csproj" />
+</Solution>
