@@ -19,7 +19,7 @@ namespace Pairox.Core.Services
 
         public async Task<SymbolInfo> GetSymbolInfo(string symbol, CancellationToken ct)
         {
-            return await mt5.GetSymbolInfo(symbol, ct);
+            return await mt5.GetSymbolInfoAsync(symbol, ct);
         }
     }
 }

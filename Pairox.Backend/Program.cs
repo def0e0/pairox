@@ -1,6 +1,8 @@
+using Hangfire;
+using Hangfire.Redis.StackExchange;
 using Microsoft.Extensions.Caching.Hybrid;
-using Pairox.Backend.Controllers;
 using Pairox.Core.Services;
+using Serilog;
 using StackExchange.Redis;
 
 namespace Pairox.Backend
@@ -10,7 +12,7 @@ namespace Pairox.Backend
         public static void Main(string[] args)
         {
             var builder = WebApplication.CreateBuilder(args);
-
+            builder.Host.UseSerilog((context, configuration) => configuration.ReadFrom.Configuration(context.Configuration));
             builder.Services.AddControllers();
             builder.Services.AddOpenApi();
             var redisConnectionString = builder.Configuration.GetConnectionString("Redis") ?? "localhost:6379";
@@ -28,6 +30,13 @@ namespace Pairox.Backend
                 options.Configuration = redisConnectionString;
                 options.InstanceName = "Pairox_";
             });
+            builder.Services.AddHangfire(config => config
+                .SetDataCompatibilityLevel(CompatibilityLevel.Version_180)
+                .UseSimpleAssemblyNameTypeSerializer()
+                .UseRecommendedSerializerSettings()
+                .UseRedisStorage(redisConnectionString));
+            builder.Services.AddHangfireServer();
+
             var mt5ConnectionString = builder.Configuration.GetConnectionString("MT5") ?? "http://localhost:7000/api/v1";
             builder.Services.AddHttpClient<IMT5Client, MT5Service>(client =>
             {
@@ -37,12 +46,21 @@ namespace Pairox.Backend
             }).AddStandardResilienceHandler();
             builder.Services.AddScoped<SettingsService>();
             builder.Services.AddScoped<PairsService>();
-
+            builder.Services.AddScoped<IScannerService, ScannerService>();
 
             var app = builder.Build();
+            app.UseHangfireDashboard();
+            app.UseSerilogRequestLogging();
+            using (var scope = app.Services.CreateScope())
+            {
+                var recurringJobManager = scope.ServiceProvider.GetRequiredService<IRecurringJobManager>();
 
-            
-
+                recurringJobManager.AddOrUpdate<IScannerService>(
+                    "scan-job",
+                    service => service.RunScanAsync(CancellationToken.None),
+                    Cron.Hourly(0)
+                );
+            }
 
             if (app.Environment.IsDevelopment())
             {
